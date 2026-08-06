@@ -167,6 +167,7 @@ Installing runtime dependencies for subagents...
 Confirm the critical packages exist:
 
 ```powershell
+Test-Path .\node_modules\cross-spawn
 Test-Path .\extensions\background-terminals\node_modules\effect
 Test-Path .\extensions\subagents\node_modules\effect
 Test-Path .\extensions\subagents\node_modules\cross-spawn
@@ -286,8 +287,8 @@ where.exe codex
 codex --version
 ```
 
-The extension prefers an npm `codex.cmd` shim over a potentially unusable
-WindowsApps alias and starts it through `cross-spawn`.
+The extension puts a usable npm `codex.cmd` directory ahead of WindowsApps
+aliases and launches batch shims through `cross-spawn`.
 
 Authenticate Codex in the same Windows user account used to run Pi:
 
@@ -301,17 +302,18 @@ Complete the login flow, exit Codex, then restart Pi.
 
 The `@anthropic-ai/claude-agent-sdk` dependency ships its platform runtime. A
 separate `claude.cmd` is not required for the backend to appear. When a native
-`claude.exe` exists on `PATH`, it may be used as an override; batch shims are
-ignored on Windows.
+`claude.exe` exists on `PATH`, it may be used as an override; batch-only shim
+locations are ignored on Windows.
 
 If the SDK reports authentication problems, configure the SDK/Claude login for
 the same user and terminal environment, then restart Pi.
 
 ## 9. Background terminals on Windows
 
-Background commands are passed as one command string to Node's Windows shell
-handling. This avoids fragile hand-built `cmd.exe /s /c` quoting and supports
-paths containing spaces and nested quotes.
+The shared compatibility layer recognizes the extension's
+`cmd.exe /d /s /c <command>` launch and converts it to Node's native Windows
+shell handling. This preserves the existing terminal manager while fixing paths
+with spaces and nested quoting.
 
 Useful smoke tests inside Pi include:
 
@@ -375,10 +377,13 @@ Repository-level checks:
 ```powershell
 Set-Location (Join-Path $HOME ".pi\agent")
 npm run check
-npm --prefix extensions/background-terminals test
+node --experimental-strip-types --check .\extensions\shared\windows-spawn-patch.ts
+node --experimental-strip-types --check .\extensions\background-terminals\src\manager.ts
+node --experimental-strip-types --check .\extensions\subagents\src\backends\codex.ts
+node --experimental-strip-types --check .\extensions\subagents\src\backends\claude.ts
 ```
 
-For development checks that require nested dev dependencies:
+For development checks that require nested development dependencies:
 
 ```powershell
 npm --prefix extensions/subagents install
@@ -390,12 +395,10 @@ npm --prefix extensions/custom-ocr run check
 npm --prefix extensions/custom-ocr test
 ```
 
-The live Codex/Claude tests require working authentication and may perform real
-agent activity:
-
-```powershell
-npm --prefix extensions/subagents run test:live
-```
+Some historical background-terminal and live-agent tests invoke POSIX commands
+such as `true` or `sleep`. Run those particular cases in WSL until they are made
+shell-neutral. Live Codex/Claude tests also require working authentication and
+may perform real agent activity.
 
 ## 12. Updating later
 
@@ -416,6 +419,7 @@ Restart Pi after every update that changes extensions or dependencies.
 ```powershell
 Get-Command codex -All
 where.exe codex
+Test-Path .\node_modules\cross-spawn
 Test-Path .\extensions\subagents\node_modules\cross-spawn
 npm install
 ```
