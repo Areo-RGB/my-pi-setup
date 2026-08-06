@@ -1,0 +1,39 @@
+name: Apply Windows main sync
+
+on:
+  push:
+    branches:
+      - chore/windows-main-sync
+    paths:
+      - .github/workflows/apply-windows-main-sync.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out sync branch
+        uses: actions/checkout@v4
+        with:
+          ref: chore/windows-main-sync
+          fetch-depth: 0
+
+      - name: Apply verified patch
+        shell: bash
+        run: |
+          cat patches/windows-main.patch.part-* > "$RUNNER_TEMP/windows-main.patch"
+          git apply --check "$RUNNER_TEMP/windows-main.patch"
+          git apply "$RUNNER_TEMP/windows-main.patch"
+          rm patches/windows-main.patch.part-*
+          rmdir patches 2>/dev/null || true
+
+      - name: Commit applied changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix Windows process launching and add setup guide"
+          git push origin HEAD:chore/windows-main-sync
