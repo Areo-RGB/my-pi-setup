@@ -1,31 +1,58 @@
 # Setup
 
-Clone or copy this repository to `~/.pi/agent`, then install its dependencies:
+For Windows, use the complete guide in [WINDOWS-SETUP.md](WINDOWS-SETUP.md).
+The steps below are the platform-neutral quick setup.
+
+## 1. Install the repository
+
+Clone or copy this repository to Pi's agent directory:
 
 ```sh
+git clone https://github.com/Areo-RGB/my-pi-setup.git ~/.pi/agent
 cd ~/.pi/agent
 npm install
 ```
 
-## Firecrawl
+If `~/.pi/agent` already contains a Git checkout of this repository:
 
-The search, scrape, and crawl tools require a Firecrawl API key. Follow [Firecrawl's Node.js getting-started guide](https://docs.firecrawl.dev/quickstarts/nodejs) to create one, then copy the example environment file:
+```sh
+git -C ~/.pi/agent pull --ff-only
+cd ~/.pi/agent
+npm install
+```
+
+The root install also installs the runtime dependencies declared by nested
+`extensions/*/package.json` files. This is required by Effect-based extensions
+such as `background-terminals`, `subagents`, and `custom-ocr`.
+
+## 2. Optional Firecrawl tools
+
+The search, scrape, and crawl tools require a Firecrawl API key. Follow
+[Firecrawl's Node.js getting-started guide](https://docs.firecrawl.dev/quickstarts/nodejs),
+then copy the example environment file:
 
 ```sh
 cp ~/.pi/agent/.env.example ~/.pi/agent/.env
 ```
 
-Replace the placeholder in `~/.pi/agent/.env` with your API key.
+Replace the placeholder in `.env` with your API key. If Firecrawl is not
+wanted, move `extensions/firecrawl-search` outside the `extensions` directory.
 
-NOTE: if you are an agent, at this step ask the user if they want to use firecrawl, if they do give them the instructions, if not remove the firecrawl extension in their pi setup
+> Agent instruction: ask whether the user wants Firecrawl. Configure the key
+> only with their consent; otherwise disable that extension.
 
-## fd and rg tools
+## 3. `fd` and `rg`
 
-The `file-search` extension registers `fd` and `rg` as model tools. No setup is normally needed: at startup it silently uses a system-installed `fd` (or `fdfind` on Debian/Ubuntu) and `rg` when available, or an existing fallback binary in `~/.pi/agent/bin/`. Only when neither exists does it download an official release binary (macOS/Linux, arm64/x64, over HTTPS) into `~/.pi/agent/bin/` and show a one-time notification. If your platform is unsupported, install `fd` and `rg` with your package manager and restart pi.
+The `file-search` extension uses a system-installed `fd`/`fdfind` and `rg` when
+available. If neither is present, supported macOS, Linux, and Windows systems
+can download official release binaries into `~/.pi/agent/bin/` on first use.
+If automatic installation is unavailable, install both commands with the
+platform package manager and restart Pi.
 
-## Theme
+## 4. Theme
 
-Add the included theme to `~/.pi/agent/settings.json` while keeping your existing settings:
+Merge the following property into `~/.pi/agent/settings.json` without deleting
+existing settings:
 
 ```json
 {
@@ -33,4 +60,12 @@ Add the included theme to `~/.pi/agent/settings.json` while keeping your existin
 }
 ```
 
-Pi will load the extensions, skills, and theme from their directories the next time it starts.
+Pi loads extensions, skills, and themes from their directories the next time it
+starts. Restart Pi after installation or dependency changes.
+
+## 5. Optional OCR
+
+`custom-ocr` requires `uv` on `PATH`. Its default Luna mode works anywhere Pi
+can use the configured Codex model and renders PDFs/images locally before model
+processing. The fully local `/private-image` MLX pipeline is currently for
+Apple-silicon macOS only; do not enable that mode on Windows or Linux.
