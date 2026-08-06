@@ -5,6 +5,14 @@ on:
     paths:
       - "apps/warp-pi-terminal/**"
       - ".github/workflows/build-warp-pi-terminal.yml"
+  pull_request_review:
+    types:
+      - submitted
+  workflow_run:
+    workflows:
+      - Copilot
+    types:
+      - completed
   workflow_dispatch:
 
 permissions:
@@ -12,12 +20,20 @@ permissions:
 
 jobs:
   windows:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request_review' && github.event.pull_request.head.ref == 'feature/warp-pi-terminal') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'feature/warp-pi-terminal')
     runs-on: windows-latest
     timeout-minutes: 90
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.pull_requests[0].head.sha || (github.event_name == 'pull_request_review' && github.event.pull_request.head.sha || github.sha) }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -53,7 +69,8 @@ jobs:
           New-Item -ItemType Directory -Path $dist -Force | Out-Null
           Copy-Item "apps/warp-pi-terminal/build/warp-pi-terminal/target/x86_64-pc-windows-msvc/release/warp-pi-terminal.exe" "$dist/WarpPiTerminal.exe"
           Copy-Item "apps/warp-pi-terminal/build/source.zip" "$dist/warp-pi-terminal-source_chatgpt.zip"
-          Get-FileHash "$dist/WarpPiTerminal.exe" -Algorithm SHA256 | Format-List | Out-File "$dist/SHA256.txt"
+          $hash = (Get-FileHash "$dist/WarpPiTerminal.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *WarpPiTerminal.exe" | Set-Content "$dist/SHA256.txt"
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
