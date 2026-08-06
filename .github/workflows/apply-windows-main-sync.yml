@@ -1,5 +1,7 @@
 name: Apply Windows main sync
 
+# This one-shot workflow is changed through a merged pull request so GitHub
+# generates the push event itself. It removes its patch staging files after use.
 on:
   push:
     branches:
