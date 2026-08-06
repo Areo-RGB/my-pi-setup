@@ -1,0 +1,64 @@
+name: Build Warp Pi Terminal
+
+on:
+  pull_request:
+    paths:
+      - "apps/warp-pi-terminal/**"
+      - ".github/workflows/build-warp-pi-terminal.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-07-28
+          targets: x86_64-pc-windows-msvc
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/warp-pi-terminal/build/warp-pi-terminal
+
+      - name: Expand source bundle
+        shell: pwsh
+        run: |
+          $sourceRoot = Join-Path $PWD "apps/warp-pi-terminal"
+          $buildRoot = Join-Path $sourceRoot "build"
+          $archive = Join-Path $buildRoot "source.zip"
+          New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
+          $encoded = (Get-Content (Join-Path $sourceRoot "source.zip.b64") -Raw) -replace '\s', ''
+          [IO.File]::WriteAllBytes($archive, [Convert]::FromBase64String($encoded))
+          Expand-Archive -Path $archive -DestinationPath $buildRoot -Force
+
+      - name: Build release executable
+        shell: pwsh
+        working-directory: apps/warp-pi-terminal/build/warp-pi-terminal
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Package executable and source
+        shell: pwsh
+        run: |
+          $dist = Join-Path $PWD "dist"
+          New-Item -ItemType Directory -Path $dist -Force | Out-Null
+          Copy-Item "apps/warp-pi-terminal/build/warp-pi-terminal/target/x86_64-pc-windows-msvc/release/warp-pi-terminal.exe" "$dist/WarpPiTerminal.exe"
+          Copy-Item "apps/warp-pi-terminal/build/source.zip" "$dist/warp-pi-terminal-source_chatgpt.zip"
+          Get-FileHash "$dist/WarpPiTerminal.exe" -Algorithm SHA256 | Format-List | Out-File "$dist/SHA256.txt"
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: WarpPiTerminal-windows-x64
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
