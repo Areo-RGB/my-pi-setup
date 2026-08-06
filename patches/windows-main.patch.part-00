@@ -1,0 +1,221 @@
+diff --git a/README.md b/README.md
+index f6ddfe2..c127e62 100644
+--- a/README.md
++++ b/README.md
+@@ -1,16 +1,25 @@
+ # my pi setup
+ 
+-This setup is fairly opinionated, it:
++An opinionated Pi configuration with:
+ 
+-- sets up github dark default as the theme
+-- adds firecrawl tools for searching and scraping
+-- updates the bottom bar to have the info I prefer to see
+-- adds background terminals + ui to manage them
+-- adds subagents to pi
+-- adds workflows to pi
+-- adds an ask user tool, which lets the model ask multiple choice questions
+-- adds first-class `fd` (file discovery) and `rg` (content search) tools
++- GitHub Dark Default theme
++- Firecrawl search, scrape, and crawl tools
++- customized status and model information
++- background terminals with a management UI
++- Pi, Codex, and Claude subagents
++- reusable workflows and an ask-user tool
++- first-class `fd` file discovery and `rg` content search
++- summaries and “by the way” follow-up delivery
++- local file/image/PDF parsing through the optional `custom-ocr` extension
+ 
+ ![Pi setup interface](assets/pi-setup.jpeg)
+ 
+-**note**: if you are an agent reading this, instructions for setting this up on your own pi are available in `./SETUP.md`.
++## Setup
++
++- **Windows 10/11:** follow [WINDOWS-SETUP.md](WINDOWS-SETUP.md).
++- **Other platforms or automated setup:** follow [SETUP.md](SETUP.md).
++- **Windows process implementation notes:** see
++  [WINDOWS-PROCESS-FIX.md](WINDOWS-PROCESS-FIX.md).
++
++> Agent note: installation instructions for configuring a user's Pi live in
++> `SETUP.md`; use the Windows guide when `process.platform === "win32"`.
+diff --git a/SETUP.md b/SETUP.md
+index 42d2fbe..b434d40 100644
+--- a/SETUP.md
++++ b/SETUP.md
+@@ -1,31 +1,58 @@
+ # Setup
+ 
+-Clone or copy this repository to `~/.pi/agent`, then install its dependencies:
++For Windows, use the complete guide in [WINDOWS-SETUP.md](WINDOWS-SETUP.md).
++The steps below are the platform-neutral quick setup.
++
++## 1. Install the repository
++
++Clone or copy this repository to Pi's agent directory:
+ 
+ ```sh
++git clone https://github.com/Areo-RGB/my-pi-setup.git ~/.pi/agent
+ cd ~/.pi/agent
+ npm install
+ ```
+ 
+-## Firecrawl
++If `~/.pi/agent` already contains a Git checkout of this repository:
+ 
+-The search, scrape, and crawl tools require a Firecrawl API key. Follow [Firecrawl's Node.js getting-started guide](https://docs.firecrawl.dev/quickstarts/nodejs) to create one, then copy the example environment file:
++```sh
++git -C ~/.pi/agent pull --ff-only
++cd ~/.pi/agent
++npm install
++```
++
++The root install also installs the runtime dependencies declared by nested
++`extensions/*/package.json` files. This is required by Effect-based extensions
++such as `background-terminals`, `subagents`, and `custom-ocr`.
++
++## 2. Optional Firecrawl tools
++
++The search, scrape, and crawl tools require a Firecrawl API key. Follow
++[Firecrawl's Node.js getting-started guide](https://docs.firecrawl.dev/quickstarts/nodejs),
++then copy the example environment file:
+ 
+ ```sh
+ cp ~/.pi/agent/.env.example ~/.pi/agent/.env
+ ```
+ 
+-Replace the placeholder in `~/.pi/agent/.env` with your API key.
++Replace the placeholder in `.env` with your API key. If Firecrawl is not
++wanted, move `extensions/firecrawl-search` outside the `extensions` directory.
+ 
+-NOTE: if you are an agent, at this step ask the user if they want to use firecrawl, if they do give them the instructions, if not remove the firecrawl extension in their pi setup
++> Agent instruction: ask whether the user wants Firecrawl. Configure the key
++> only with their consent; otherwise disable that extension.
+ 
+-## fd and rg tools
++## 3. `fd` and `rg`
+ 
+-The `file-search` extension registers `fd` and `rg` as model tools. No setup is normally needed: at startup it silently uses a system-installed `fd` (or `fdfind` on Debian/Ubuntu) and `rg` when available, or an existing fallback binary in `~/.pi/agent/bin/`. Only when neither exists does it download an official release binary (macOS/Linux, arm64/x64, over HTTPS) into `~/.pi/agent/bin/` and show a one-time notification. If your platform is unsupported, install `fd` and `rg` with your package manager and restart pi.
++The `file-search` extension uses a system-installed `fd`/`fdfind` and `rg` when
++available. If neither is present, supported macOS, Linux, and Windows systems
++can download official release binaries into `~/.pi/agent/bin/` on first use.
++If automatic installation is unavailable, install both commands with the
++platform package manager and restart Pi.
+ 
+-## Theme
++## 4. Theme
+ 
+-Add the included theme to `~/.pi/agent/settings.json` while keeping your existing settings:
++Merge the following property into `~/.pi/agent/settings.json` without deleting
++existing settings:
+ 
+ ```json
+ {
+@@ -33,4 +60,12 @@ Add the included theme to `~/.pi/agent/settings.json` while keeping your existin
+ }
+ ```
+ 
+-Pi will load the extensions, skills, and theme from their directories the next time it starts.
++Pi loads extensions, skills, and themes from their directories the next time it
++starts. Restart Pi after installation or dependency changes.
++
++## 5. Optional OCR
++
++`custom-ocr` requires `uv` on `PATH`. Its default Luna mode works anywhere Pi
++can use the configured Codex model and renders PDFs/images locally before model
++processing. The fully local `/private-image` MLX pipeline is currently for
++Apple-silicon macOS only; do not enable that mode on Windows or Linux.
+diff --git a/WINDOWS-PROCESS-FIX.md b/WINDOWS-PROCESS-FIX.md
+new file mode 100644
+index 0000000..4376f5e
+--- /dev/null
++++ b/WINDOWS-PROCESS-FIX.md
+@@ -0,0 +1,54 @@
++# Windows child-process fix
++
++## What was broken
++
++- The setup instructions ran `npm install` only at the repository root, but the
++  Effect-based extensions keep their runtime dependencies in nested
++  `extensions/*/package.json` files. Those dependencies were therefore missing
++  in a clean installation.
++- The Codex subagent resolved the npm launcher `codex.cmd` and passed it directly
++  to `node:child_process.spawn()`. Windows batch files are not native
++  executables, so direct spawning can fail with `EINVAL`, `ENOENT`, `UNKNOWN`,
++  or an app-server initialization timeout.
++- The background-terminal manager manually assembled `cmd.exe /d /s /c` argv.
++  That is fragile for executable paths with spaces and commands containing
++  nested quotes.
++- The Claude backend required a PATH-installed CLI even though the Agent SDK
++  ships its own native platform binary, and it could override that native
++  binary with `claude.cmd` on Windows.
++
++## Changes
++
++- Root `npm install` now installs runtime dependencies for all nested extensions.
++- Codex app-server startup uses `cross-spawn`, which handles Windows npm command
++  shims, `PATHEXT`, and argument escaping.
++- Background terminals pass the command string to Node's `shell` option and let
++  Node construct the correct platform shell invocation.
++- Claude uses the SDK-bundled native binary by default and only accepts
++  `claude.exe` as a Windows PATH override.
++- Process tests now use shell-portable Node commands instead of POSIX-only
++  quoting, `true`, or `sleep`.
++
++## Install
++
++From the repository root:
++
++```powershell
++npm install
++```
++
++Restart Pi after installation.
++
++## Useful checks on Windows
++
++```powershell
++npm --prefix extensions/background-terminals test
++npm --prefix extensions/subagents run check
++npm --prefix extensions/subagents run test:live
++```
++
++The live subagent tests require authenticated Codex and Claude installations or
++SDK credentials as applicable.
++
++For the complete installation and troubleshooting procedure, see
++[WINDOWS-SETUP.md](WINDOWS-SETUP.md).
+diff --git a/WINDOWS-SETUP.md b/WINDOWS-SETUP.md
+new file mode 100644
+index 0000000..d08ef86
+--- /dev/null
++++ b/WINDOWS-SETUP.md
+@@ -0,0 +1,476 @@
++# Windows setup guide
++
++This guide installs the repository as the active Pi agent configuration on
++Windows 10 or Windows 11. Commands are written for PowerShell 7 (`pwsh`) and
++also work in modern Windows PowerShell unless a step says otherwise.
++
++## What this installs
++
++The repository is loaded directly from `%USERPROFILE%\.pi\agent` and provides:
++
++- background terminal tools and their `/ps` UI
++- Pi, Codex, and Claude subagents
++- `fd` and `rg` model tools
++- Firecrawl web tools when an API key is configured
++- workflows, summaries, ask-user, copy-all, and UI/status extensions
++- the GitHub Dark Default theme
++- optional image/PDF parsing through `custom-ocr`
++
++The root `npm install` runs a post-install helper that installs runtime
++packages for every nested extension. Do not install only the root dependencies
++with scripts disabled; the subagent and Effect extensions need their own
++`node_modules` directories.
++
++## 1. Prerequisites
++
++Install these before cloning:
++
++1. **Git for Windows** with `git.exe` available on `PATH`.
++2. **Node.js 24 LTS or a newer supported Node release**, including npm.
