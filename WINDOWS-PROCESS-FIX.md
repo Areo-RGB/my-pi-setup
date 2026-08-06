@@ -20,14 +20,14 @@
 ## Changes
 
 - Root `npm install` now installs runtime dependencies for all nested extensions.
-- Codex app-server startup uses `cross-spawn`, which handles Windows npm command
-  shims, `PATHEXT`, and argument escaping.
-- Background terminals pass the command string to Node's `shell` option and let
-  Node construct the correct platform shell invocation.
-- Claude uses the SDK-bundled native binary by default and only accepts
-  `claude.exe` as a Windows PATH override.
-- Process tests now use shell-portable Node commands instead of POSIX-only
-  quoting, `true`, or `sleep`.
+- A shared Windows spawn compatibility layer uses `cross-spawn` for npm
+  `.cmd`/`.bat` shims and converts manual `cmd.exe /c` launches into Node's
+  native shell handling.
+- The existing background-terminal and subagent implementations are preserved
+  behind thin compatibility entry points rather than duplicated or rewritten.
+- Codex prioritizes a usable npm `codex.cmd` directory over WindowsApps aliases.
+- Claude uses the SDK-bundled native binary by default and ignores a batch-only
+  `claude.cmd` override.
 
 ## Install
 
@@ -42,13 +42,17 @@ Restart Pi after installation.
 ## Useful checks on Windows
 
 ```powershell
-npm --prefix extensions/background-terminals test
-npm --prefix extensions/subagents run check
-npm --prefix extensions/subagents run test:live
+npm run check
+node --experimental-strip-types --check .\extensions\shared\windows-spawn-patch.ts
+node --experimental-strip-types --check .\extensions\background-terminals\src\manager.ts
+node --experimental-strip-types --check .\extensions\subagents\src\backends\codex.ts
+node --experimental-strip-types --check .\extensions\subagents\src\backends\claude.ts
 ```
 
-The live subagent tests require authenticated Codex and Claude installations or
-SDK credentials as applicable.
+The live Codex and Claude checks require working authentication and may perform
+real agent activity. The repository still contains some historical tests that
+invoke POSIX shell commands; run those specific cases in WSL until they are
+made shell-neutral.
 
 For the complete installation and troubleshooting procedure, see
 [WINDOWS-SETUP.md](WINDOWS-SETUP.md).
