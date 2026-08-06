@@ -9,6 +9,11 @@ if (process.platform === "win32" && !state[patchKey]) {
   const require = createRequire(import.meta.url);
   const crossSpawn = require("cross-spawn") as typeof childProcess.spawn;
   const nativeSpawn = childProcess.spawn.bind(childProcess);
+  type SpawnResult = ReturnType<typeof childProcess.spawn>;
+  const invokeNative = (...args: unknown[]) =>
+    (nativeSpawn as (...values: any[]) => SpawnResult)(...args);
+  const invokeCrossSpawn = (...args: unknown[]) =>
+    (crossSpawn as (...values: any[]) => SpawnResult)(...args);
 
   childProcess.spawn = ((
     command: string,
@@ -29,7 +34,7 @@ if (process.platform === "win32" && !state[patchKey]) {
       args[1]?.toLowerCase() === "/s" &&
       args[2]?.toLowerCase() === "/c"
     ) {
-      return nativeSpawn(args.slice(3).join(" "), {
+      return invokeNative(args.slice(3).join(" "), {
         ...options,
         shell: command,
         windowsHide: true,
@@ -39,12 +44,19 @@ if (process.platform === "win32" && !state[patchKey]) {
     // npm installs CLI shims as .cmd files on Windows. Node deliberately does
     // not execute those directly; cross-spawn resolves PATHEXT and quotes them.
     if (/\.(?:cmd|bat)$/i.test(command)) {
-      return crossSpawn(command, args, options);
+      return options === undefined
+        ? invokeCrossSpawn(command, args)
+        : invokeCrossSpawn(command, args, options);
     }
 
-    return Array.isArray(argsOrOptions)
-      ? nativeSpawn(command, args, options)
-      : nativeSpawn(command, options);
+    if (Array.isArray(argsOrOptions)) {
+      return options === undefined
+        ? invokeNative(command, args)
+        : invokeNative(command, args, options);
+    }
+    return options === undefined
+      ? invokeNative(command)
+      : invokeNative(command, options);
   }) as typeof childProcess.spawn;
 
   state[patchKey] = true;
